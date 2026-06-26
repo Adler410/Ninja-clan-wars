@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Ninja Clan Wars</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Hauptcontainer für alle Spiel-Bildschirme -->
+  <div id="app">
+    <!-- Startmenü -->
+    <section id="screen-menu" class="screen active">
+      <div class="menu-card">
+        <h1 class="title">Ninja Clan Wars</h1>
+        <p class="subtitle">Erobere die Lande der Schatten</p>
+        <div class="menu-buttons">
+          <button class="btn btn-primary" data-action="new-game">Neues Spiel</button>
+          <button class="btn" data-action="load-game">Spiel laden</button>
+          <button class="btn" data-action="instructions">Anleitung</button>
+          <button class="btn" data-action="settings">Einstellungen</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Anleitung -->
+    <section id="screen-instructions" class="screen">
+      <div class="panel">
+        <h2>Anleitung</h2>
+        <ul class="instructions">
+          <li>Wähle deinen Clan und erobere alle Regionen.</li>
+          <li>Pro Runde: Einkommen erhalten, Ninjas rekrutieren, Truppen bewegen, angreifen, Spezialfähigkeit einsetzen.</li>
+          <li>Klicke auf eine Region, dann nutze die Buttons unten.</li>
+          <li>Bewege oder greife nur in benachbarte Regionen.</li>
+          <li>Diplomatie wird automatisch von der KI gesteuert.</li>
+          <li>Das Spiel speichert automatisch im Browser.</li>
+        </ul>
+        <button class="btn" data-action="back-menu">Zurück</button>
+      </div>
+    </section>
+
+    <!-- Einstellungen -->
+    <section id="screen-settings" class="screen">
+      <div class="panel">
+        <h2>Einstellungen</h2>
+        <label class="row"><span>Sound</span>
+          <input type="checkbox" id="opt-sound" checked />
+        </label>
+        <label class="row"><span>Schwierigkeit</span>
+          <select id="opt-difficulty">
+            <option value="easy">Leicht</option>
+            <option value="normal" selected>Normal</option>
+            <option value="hard">Schwer</option>
+          </select>
+        </label>
+        <label class="row"><span>Clanname</span>
+          <input type="text" id="opt-clanname" value="Drachen-Clan" maxlength="20" />
+        </label>
+        <div class="button-row">
+          <button class="btn btn-primary" data-action="save-settings">Speichern</button>
+          <button class="btn" data-action="back-menu">Zurück</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Spielbildschirm -->
+    <section id="screen-game" class="screen">
+      <!-- Top HUD -->
+      <header id="hud-top">
+        <div class="hud-item"><span class="lbl">Runde</span><span id="hud-turn">1</span></div>
+        <div class="hud-item"><span class="lbl">Clan</span><span id="hud-clan">—</span></div>
+        <div class="hud-item"><span class="lbl">Gold</span><span id="hud-gold">0</span></div>
+        <div class="hud-item"><span class="lbl">Einkommen</span><span id="hud-income">0</span></div>
+        <div class="hud-item"><span class="lbl">Regionen</span><span id="hud-regions">0</span></div>
+        <button class="btn btn-small" data-action="to-menu">Menü</button>
+      </header>
+
+      <main id="game-main">
+        <!-- Liste der Regionen -->
+        <aside id="region-list">
+          <h3>Regionen</h3>
+          <ul id="region-list-ul"></ul>
+        </aside>
+
+        <!-- Kartenbereich -->
+        <div id="map-wrap">
+          <svg id="map" viewBox="0 0 1000 700" preserveAspectRatio="xMidYMid meet"></svg>
+          <div id="log-overlay"></div>
+        </div>
+
+        <!-- Detailpanel -->
+        <aside id="region-details">
+          <h3 id="rd-name">Region wählen</h3>
+          <div id="rd-body" class="muted">Klicke auf eine Region auf der Karte.</div>
+          <h3 class="mt">Diplomatie</h3>
+          <ul id="diplo-list"></ul>
+        </aside>
+      </main>
+
+      <!-- Aktionsleiste unten -->
+      <footer id="action-bar">
+        <button class="btn act" data-action="move">Bewegen</button>
+        <button class="btn act" data-action="attack">Angreifen</button>
+        <button class="btn act" data-action="recruit">Rekrutieren</button>
+        <button class="btn act" data-action="special">Spezialfähigkeit</button>
+        <button class="btn btn-primary" data-action="end-turn">Runde beenden</button>
+      </footer>
+    </section>
+
+    <!-- Modal für Dialoge -->
+    <div id="modal" class="modal-hidden">
+      <div class="modal-card">
+        <h3 id="modal-title"></h3>
+        <div id="modal-body"></div>
+        <div id="modal-actions" class="button-row"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Skripte als ES6-Module -->
+  <script type="module" src="app.js"></script>
+</body>
+</html>
