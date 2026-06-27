@@ -1,16 +1,14 @@
-// app.js — UI-Steuerung, Bildschirmwechsel und Karten-Rendering
+// app.js — UI-Steuerung, Bildschirmwechsel, Karten-Rendering
 import { Game } from "./game.js";
 import { REGIONS_DEF, EDGES } from "./map.js";
 import { NINJA_CLASSES, SPECIALS, CLANS } from "./models.js";
 import { totalTroops } from "./battle.js";
 import { loadGame, hasSave, saveSettings, loadSettings } from "./save.js";
 
-// ===== Hilfsfunktionen =====
 const $ = sel => document.querySelector(sel);
 const $$ = sel => document.querySelectorAll(sel);
 const SVG_NS = "http://www.w3.org/2000/svg";
 
-// Audio-Stub: spielt Sound wenn Datei vorhanden, sonst still
 function playSound(name) {
   try {
     const settings = loadSettings();
@@ -24,31 +22,35 @@ function playSound(name) {
 class UI {
   constructor() {
     this.game = null;
-    this.bindMenu();
+    this.bindGlobal();
     this.bindActionBar();
     this.bindModal();
     // Settings vorladen
     const s = loadSettings();
     if (s) {
-      $("#opt-sound").checked = s.sound !== false;
-      $("#opt-difficulty").value = s.difficulty || "normal";
-      $("#opt-clanname").value = s.clanName || "Drachen-Clan";
+      if ($("#opt-sound")) $("#opt-sound").checked = s.sound !== false;
+      if ($("#opt-difficulty")) $("#opt-difficulty").value = s.difficulty || "normal";
+      if ($("#opt-clanname")) $("#opt-clanname").value = s.clanName || "Drachen-Clan";
+      if ($("#opt-p1")) $("#opt-p1").value = s.p1Name || "Spieler 1";
+      if ($("#opt-p2")) $("#opt-p2").value = s.p2Name || "Spieler 2";
+      if ($("#opt-handoff")) $("#opt-handoff").checked = s.handoff !== false;
     }
   }
 
-  // ===== Bildschirmwechsel =====
   showScreen(id) {
     $$(".screen").forEach(s => s.classList.remove("active"));
     $(id).classList.add("active");
   }
 
-  bindMenu() {
+  bindGlobal() {
     document.body.addEventListener("click", (e) => {
       const btn = e.target.closest("[data-action]");
       if (!btn) return;
       const action = btn.dataset.action;
       switch (action) {
-        case "new-game": this.startNewGame(); break;
+        case "goto-mode": this.showScreen("#screen-mode"); break;
+        case "start-single": this.startNewGame("single"); break;
+        case "start-hotseat": this.startNewGame("hotseat"); break;
         case "load-game": this.loadSaved(); break;
         case "instructions": this.showScreen("#screen-instructions"); break;
         case "settings": this.showScreen("#screen-settings"); break;
@@ -57,29 +59,43 @@ class UI {
           this.showScreen("#screen-menu");
           break;
         case "save-settings":
-          this.saveSettings();
+          this.collectAndSaveSettings();
           this.showScreen("#screen-menu");
+          break;
+        case "handoff-continue":
+          this.showScreen("#screen-game");
+          this.renderAll();
           break;
       }
     });
   }
 
-  saveSettings() {
-    const settings = {
-      sound: $("#opt-sound").checked,
-      difficulty: $("#opt-difficulty").value,
-      clanName: $("#opt-clanname").value.trim() || "Drachen-Clan"
-    };
+  collectAndSaveSettings() {
+    const settings = Object.assign(loadSettings() || {}, {
+      sound: $("#opt-sound") ? $("#opt-sound").checked : true,
+      difficulty: $("#opt-difficulty") ? $("#opt-difficulty").value : "normal",
+      clanName: $("#opt-clanname") ? ($("#opt-clanname").value.trim() || "Drachen-Clan") : "Drachen-Clan",
+      p1Name: $("#opt-p1") ? ($("#opt-p1").value.trim() || "Spieler 1") : "Spieler 1",
+      p2Name: $("#opt-p2") ? ($("#opt-p2").value.trim() || "Spieler 2") : "Spieler 2",
+      handoff: $("#opt-handoff") ? $("#opt-handoff").checked : true,
+    });
     saveSettings(settings);
     if (this.game) this.game.settings = settings;
+    return settings;
   }
 
-  startNewGame() {
-    this.saveSettings();
+  startNewGame(mode) {
+    const settings = this.collectAndSaveSettings();
+    settings.mode = mode;
+    saveSettings(settings);
     this.game = new Game(this);
-    this.game.newGame(loadSettings());
-    this.showScreen("#screen-game");
-    this.renderAll();
+    this.game.newGame(settings);
+    if (mode === "hotseat" && settings.handoff !== false) {
+      this.handoffTo(this.game.player);
+    } else {
+      this.showScreen("#screen-game");
+      this.renderAll();
+    }
   }
 
   loadSaved() {
@@ -90,17 +106,33 @@ class UI {
     }
     this.game = new Game(this);
     this.game.loadFrom(saved);
-    this.showScreen("#screen-game");
-    this.renderAll();
+    if (this.game.mode === "hotseat" && (this.game.settings && this.game.settings.handoff !== false)) {
+      this.handoffTo(this.game.player);
+    } else {
+      this.showScreen("#screen-game");
+      this.renderAll();
+    }
   }
 
-  // ===== Karten-Rendering (SVG) =====
+  // ===== Übergabe-Bildschirm =====
+  handoffTo(clan) {
+    if (!this.game) return;
+    if (this.game.mode !== "hotseat" || (this.game.settings && this.game.settings.handoff === false)) {
+      this.showScreen("#screen-game");
+      this.renderAll();
+      return;
+    }
+    $("#handoff-title").textContent = `Bitte an ${clan.name} übergeben`;
+    $("#handoff-sub").textContent = `Runde ${this.game.turn} · ${clan.name} ist als Nächstes am Zug.`;
+    this.showScreen("#screen-handoff");
+  }
+
+  // ===== Karten-Rendering =====
   renderMap() {
     const svg = $("#map");
     svg.innerHTML = "";
     const game = this.game;
 
-    // Kanten zeichnen
     EDGES.forEach(([a, b]) => {
       const ra = REGIONS_DEF.find(r => r.id === a);
       const rb = REGIONS_DEF.find(r => r.id === b);
@@ -111,15 +143,19 @@ class UI {
       svg.appendChild(line);
     });
 
-    // Regionen zeichnen
     game.regions.forEach(region => {
       const g = document.createElementNS(SVG_NS, "g");
       g.setAttribute("class", "region-node" + (region.id === game.selectedRegionId ? " selected" : ""));
       g.setAttribute("transform", `translate(${region.x},${region.y})`);
       g.dataset.id = region.id;
 
+      const ring = document.createElementNS(SVG_NS, "circle");
+      ring.setAttribute("r", 42);
+      ring.setAttribute("class", "ring");
+      g.appendChild(ring);
+
       const circle = document.createElementNS(SVG_NS, "circle");
-      circle.setAttribute("r", 30);
+      circle.setAttribute("r", 36);
       circle.setAttribute("class", "body");
       const owner = region.owner ? game.clans.find(c => c.id === region.owner) : null;
       circle.setAttribute("fill", owner ? owner.color : "#3a3f55");
@@ -127,12 +163,13 @@ class UI {
 
       const count = document.createElementNS(SVG_NS, "text");
       count.setAttribute("class", "count");
-      count.setAttribute("y", 5);
+      count.setAttribute("y", 8);
       count.textContent = totalTroops(region.troops);
       g.appendChild(count);
 
       const name = document.createElementNS(SVG_NS, "text");
-      name.setAttribute("y", 50);
+      name.setAttribute("class", "name-label");
+      name.setAttribute("y", 60);
       name.textContent = region.name;
       g.appendChild(name);
 
@@ -149,9 +186,12 @@ class UI {
     const p = g.player;
     $("#hud-turn").textContent = g.turn;
     $("#hud-clan").textContent = p.name;
+    $("#hud-clan-dot").style.background = p.color;
+    $("#hud-clan-dot").style.color = p.color;
     $("#hud-gold").textContent = p.gold;
     $("#hud-income").textContent = g.incomeFor(p);
     $("#hud-regions").textContent = g.regions.filter(r => r.owner === p.id).length;
+    $("#hud-mode-label").textContent = g.mode === "hotseat" ? `2-Spieler · am Zug` : "Einzelspieler";
   }
 
   renderRegionList() {
@@ -162,7 +202,7 @@ class UI {
       if (r.id === this.game.selectedRegionId) li.classList.add("selected");
       const owner = r.owner ? this.game.clans.find(c => c.id === r.owner) : null;
       const dotColor = owner ? owner.color : "#666";
-      li.innerHTML = `<span><span class="dot" style="background:${dotColor}"></span>${r.name}</span><span>${totalTroops(r.troops)}</span>`;
+      li.innerHTML = `<span><span class="dot" style="background:${dotColor};color:${dotColor}"></span>${r.name}</span><span>${totalTroops(r.troops)}</span>`;
       li.addEventListener("click", () => this.game.selectRegion(r.id));
       ul.appendChild(li);
     });
@@ -174,7 +214,7 @@ class UI {
     const body = $("#rd-body");
     if (!r) {
       nameEl.textContent = "Region wählen";
-      body.innerHTML = '<div class="muted">Klicke auf eine Region.</div>';
+      body.innerHTML = '<div class="muted">Tippe eine Region an.</div>';
       return;
     }
     const owner = r.owner ? this.game.clans.find(c => c.id === r.owner) : null;
@@ -195,6 +235,7 @@ class UI {
 
   renderDiplomacy() {
     const ul = $("#diplo-list");
+    if (!ul) return;
     ul.innerHTML = "";
     const player = this.game.player;
     this.game.clans.forEach(c => {
@@ -212,7 +253,7 @@ class UI {
     const overlay = $("#log-overlay");
     if (!overlay) return;
     overlay.innerHTML = "";
-    const msgs = this.game.logMessages.slice(-5);
+    const msgs = this.game.logMessages.slice(-4);
     msgs.forEach(m => {
       const d = document.createElement("div");
       d.className = "log-msg " + (m.type || "");
@@ -222,6 +263,7 @@ class UI {
   }
 
   renderAll() {
+    if (!this.game) return;
     this.renderHud();
     this.renderMap();
     this.renderRegionList();
@@ -236,7 +278,7 @@ class UI {
     const x = (a.x + b.x) / 2, y = (a.y + b.y) / 2;
     const c = document.createElementNS(SVG_NS, "circle");
     c.setAttribute("cx", x); c.setAttribute("cy", y);
-    c.setAttribute("r", 18);
+    c.setAttribute("r", 22);
     c.setAttribute("class", "clash");
     svg.appendChild(c);
     setTimeout(() => c.remove(), 600);
@@ -256,7 +298,7 @@ class UI {
   // ===== Aktionsleiste =====
   bindActionBar() {
     $("#action-bar").addEventListener("click", (e) => {
-      const btn = e.target.closest("button.act, button[data-action='end-turn']");
+      const btn = e.target.closest("button[data-action]");
       if (!btn) return;
       const action = btn.dataset.action;
       if (!this.game) return;
@@ -309,7 +351,6 @@ class UI {
 
   alertMsg(title, msg) { this.openModal(title, `<p>${msg}</p>`); }
 
-  // Hilfsfunktion: erfordert gewählte eigene Region
   requireOwnSelected() {
     const r = this.game.selectedRegion();
     if (!r) { this.alertMsg("Keine Auswahl", "Wähle zuerst eine Region."); return null; }
@@ -416,23 +457,17 @@ class UI {
     });
   }
 
-  showVictory(won) {
-    this.openModal(won ? "Sieg!" : "Niederlage",
-      won ? "<p>Du beherrschst alle Regionen. Glückwunsch, Schattenmeister!</p>"
-          : "<p>Dein Clan wurde ausgelöscht. Versuche es erneut.</p>",
+  showVictory(won, winner) {
+    const title = won ? "Sieg!" : "Niederlage";
+    const body = winner
+      ? `<p><b style="color:${winner.color}">${winner.name}</b> beherrscht alle Regionen!</p>`
+      : "<p>Dein Clan wurde ausgelöscht. Versuche es erneut.</p>";
+    this.openModal(title, body,
       [{ label: "Zum Menü", primary: true, onClick: () => this.showScreen("#screen-menu") }]
     );
   }
 }
 
-// ===== Bootstrap =====
 window.addEventListener("DOMContentLoaded", () => {
-  const ui = new UI();
-  // Wenn ein Spielstand vorhanden ist: zeige Menü aber Auto-Load-Hinweis ist via Button "Spiel laden" verfügbar.
-  // Auto-Load: direkt einsteigen, wenn Spielstand vorhanden
-  if (hasSave()) {
-    // Auto-Load nur, wenn der Spieler nicht aktiv "Neues Spiel" gewählt hat
-    // Wir zeigen das Menü, aber Button "Spiel laden" funktioniert.
-  }
-  window.__ui = ui;
+  window.__ui = new UI();
 });
