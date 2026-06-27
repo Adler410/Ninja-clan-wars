@@ -1,4 +1,4 @@
-// game.js — Kernlogik des Spiels
+// game.js — Kernlogik des Spiels (mit Einzelspieler- und Hotseat-Modus)
 import { CLANS, createClanState, NINJA_CLASSES, SPECIALS } from "./models.js";
 import { REGIONS_DEF, EDGES, buildAdjacency, createInitialRegions } from "./map.js";
 import { resolveBattle, totalTroops, attackPower, defensePower } from "./battle.js";
@@ -13,16 +13,45 @@ export class Game {
     this.logMessages = [];
   }
 
-  // Initialisiert ein neues Spiel
+  // settings: { mode: 'single'|'hotseat', clanName, p1Name, p2Name, handoff, difficulty, sound }
   newGame(settings) {
-    this.settings = settings || { difficulty: "normal", clanName: "Drachen-Clan", sound: true };
+    this.settings = Object.assign({
+      mode: "single",
+      difficulty: "normal",
+      clanName: "Drachen-Clan",
+      p1Name: "Spieler 1",
+      p2Name: "Spieler 2",
+      handoff: true,
+      sound: true
+    }, settings || {});
+
+    this.mode = this.settings.mode;
     this.turn = 1;
-    this.clans = CLANS.map(c => {
+    this.gameOver = false;
+    this.logMessages = [];
+
+    // Clans aufbauen
+    this.clans = CLANS.map((c, i) => {
       const state = createClanState(c);
-      if (c.isPlayer) state.name = this.settings.clanName || c.name;
+      state.isPlayer = false;
       return state;
     });
-    // Beziehungen initialisieren: alle neutral
+
+    if (this.mode === "hotseat") {
+      // Erste beiden Clans = menschliche Spieler
+      this.clans[0].isPlayer = true;
+      this.clans[0].name = (this.settings.p1Name || "Spieler 1") + " (Drachen)";
+      this.clans[1].isPlayer = true;
+      this.clans[1].name = (this.settings.p2Name || "Spieler 2") + " (Tiger)";
+      this.humanIndices = [0, 1];
+    } else {
+      this.clans[0].isPlayer = true;
+      this.clans[0].name = this.settings.clanName || "Drachen-Clan";
+      this.humanIndices = [0];
+    }
+    this.currentHumanPos = 0;
+
+    // Beziehungen initialisieren
     for (const c of this.clans) {
       for (const o of this.clans) {
         if (c.id !== o.id) c.relations[o.id] = "neutral";
@@ -30,22 +59,30 @@ export class Game {
     }
     this.regions = createInitialRegions(this.clans);
     this.selectedRegionId = null;
-    this.logMessages = [];
-    this.gameOver = false;
-    this.log("Das Spiel beginnt. Erobere alle Regionen!");
+    this.log(`Das Spiel beginnt (${this.mode === "hotseat" ? "2-Spieler" : "Einzelspieler"}).`);
+
+    // Einkommen für ersten aktiven Spieler
     this.collectIncome(this.player);
     this.save();
   }
 
-  // Lädt einen gespeicherten Spielstand
   loadFrom(saved) {
     Object.assign(this, saved);
     this.adjacency = buildAdjacency();
+    if (!this.mode) this.mode = "single";
+    if (!this.humanIndices) this.humanIndices = this.clans.map((c, i) => c.isPlayer ? i : -1).filter(i => i >= 0);
+    if (typeof this.currentHumanPos !== "number") this.currentHumanPos = 0;
     return true;
   }
 
+  // Aktuell aktiver menschlicher Spieler
   get player() {
-    return this.clans.find(c => c.isPlayer);
+    const idx = this.humanIndices[this.currentHumanPos] ?? 0;
+    return this.clans[idx];
+  }
+
+  isAIClan(clan) {
+    return !this.humanIndices.includes(this.clans.indexOf(clan));
   }
 
   selectedRegion() {
@@ -60,19 +97,15 @@ export class Game {
   log(msg, type = "") {
     this.logMessages.push({ msg, type, turn: this.turn });
     if (this.logMessages.length > 60) this.logMessages.shift();
-    this.ui.renderLog();
+    if (this.ui && this.ui.renderLog) this.ui.renderLog();
   }
 
   // ----- Einkommen -----
   collectIncome(clan) {
-    let inc = this.incomeFor(clan);
-    clan.gold += inc;
+    clan.gold += this.incomeFor(clan);
   }
-
   incomeFor(clan) {
-    return this.regions
-      .filter(r => r.owner === clan.id)
-      .reduce((s, r) => s + r.income, 0);
+    return this.regions.filter(r => r.owner === clan.id).reduce((s, r) => s + r.income, 0);
   }
 
   // ----- Spieler-Aktionen -----
@@ -84,7 +117,7 @@ export class Game {
     if (player.gold < cls.cost) return { ok: false, msg: "Nicht genug Gold." };
     player.gold -= cls.cost;
     region.troops[classId] = (region.troops[classId] || 0) + 1;
-    this.log(`Rekrutiert: 1× ${cls.name} in ${region.name}.`);
+    this.log(`${player.name}: rekrutiert 1× ${cls.name} in ${region.name}.`);
     this.save();
     return { ok: true };
   }
@@ -98,7 +131,7 @@ export class Game {
     if (totalTroops(from.troops) <= amount) return { ok: false, msg: "Mindestens 1 Truppe muss bleiben." };
     const moved = takeTroops(from, Math.min(0.99, amount / Math.max(1, totalTroops(from.troops))));
     mergeTroops(to.troops, moved);
-    this.log(`Truppen verschoben: ${from.name} → ${to.name}.`);
+    this.log(`${this.player.name}: ${from.name} → ${to.name}.`);
     this.save();
     return { ok: true };
   }
@@ -125,7 +158,7 @@ export class Game {
       const prevOwner = to.owner;
       to.owner = this.player.id;
       to.troops = attacking;
-      msg = `Sieg! Du hast ${to.name} erobert. Verluste: ${result.attackerLosses}, Feind: ${result.defenderLosses}.`;
+      msg = `Sieg! ${this.player.name} erobert ${to.name}. Verluste: ${result.attackerLosses}, Feind: ${result.defenderLosses}.`;
       this.log(msg, "good");
       this.animateCapture(to);
       if (prevOwner) checkElimination(this, prevOwner);
@@ -173,7 +206,7 @@ export class Game {
         break;
     }
     player.gold -= spec.cost;
-    this.log(`Spezialfähigkeit eingesetzt: ${spec.name} → ${target.name}.`);
+    this.log(`${player.name}: ${spec.name} → ${target.name}.`);
     this.save();
     return { ok: true };
   }
@@ -181,49 +214,87 @@ export class Game {
   // ----- Rundenwechsel -----
   endTurn() {
     if (this.gameOver) return;
+    this.selectedRegionId = null;
 
-    // KI-Züge ausführen
+    // Nächsten menschlichen Spieler bestimmen
+    this.currentHumanPos++;
+    if (this.currentHumanPos < this.humanIndices.length) {
+      // Übergabe an nächsten menschlichen Spieler
+      this.collectIncome(this.player);
+      this.save();
+      this.ui.handoffTo(this.player);
+      return;
+    }
+
+    // Alle Menschen sind durch → KI-Züge ausführen
     for (const clan of this.clans) {
-      if (clan.isPlayer || clan.eliminated) continue;
+      if (clan.eliminated) continue;
+      if (this.humanIndices.includes(this.clans.indexOf(clan))) continue;
       this.collectIncome(clan);
       try { runAITurn(this, clan); } catch (e) { console.warn("KI-Fehler:", e); }
     }
 
-    // Nächste Runde
+    // Neue Runde
     this.turn++;
     this.log(`Runde ${this.turn} beginnt.`);
-
-    // Defense-Modifier zurücksetzen
     this.regions.forEach(r => r.defenseModifier = 1);
-
-    // Spieler-Einkommen
+    this.currentHumanPos = 0;
     this.collectIncome(this.player);
 
     this.checkVictory();
     this.save();
-    this.ui.renderAll();
+
+    if (this.gameOver) {
+      this.ui.renderAll();
+      return;
+    }
+
+    if (this.mode === "hotseat") {
+      this.ui.handoffTo(this.player);
+    } else {
+      this.ui.renderAll();
+    }
   }
 
   checkVictory() {
     const owners = new Set(this.regions.map(r => r.owner).filter(Boolean));
-    if (owners.size === 1 && owners.has(this.player.id)) {
+    if (owners.size === 1) {
+      const winnerId = [...owners][0];
+      const winner = this.clans.find(c => c.id === winnerId);
+      const winnerIdx = this.clans.indexOf(winner);
+      const wonByHuman = this.humanIndices.includes(winnerIdx);
       this.gameOver = true;
-      this.log("SIEG! Du beherrschst die gesamte Karte.", "good");
-      this.ui.showVictory(true);
-    } else if (!owners.has(this.player.id)) {
-      this.gameOver = true;
-      this.log("NIEDERLAGE! Dein Clan wurde vernichtet.", "bad");
-      this.ui.showVictory(false);
+      this.log(`SIEG! ${winner.name} beherrscht die gesamte Karte.`, "good");
+      this.ui.showVictory(wonByHuman, winner);
+      return;
+    }
+    // Im Einzelspieler: Niederlage, wenn Spieler keine Region mehr hat
+    if (this.mode === "single") {
+      const playerClan = this.clans[this.humanIndices[0]];
+      if (!owners.has(playerClan.id)) {
+        this.gameOver = true;
+        this.log("NIEDERLAGE! Dein Clan wurde vernichtet.", "bad");
+        this.ui.showVictory(false, null);
+      }
+    } else {
+      // Im Hotseat: prüfe, ob nur noch ein menschlicher Spieler übrig ist und keine KI-Konkurrenz da ist
+      const remainingHumans = this.humanIndices.filter(i => owners.has(this.clans[i].id));
+      if (remainingHumans.length === 1 && this.clans.filter(c => !c.eliminated && !this.humanIndices.includes(this.clans.indexOf(c))).every(c => !owners.has(c.id))) {
+        // ein menschlicher Spieler hat alle Regionen via owners.size check, sonst nur Teil — nichts machen, oben prüft owners.size===1
+      }
     }
   }
 
-  // ----- UI-Animationshooks -----
-  animateClash(a, b) { this.ui.animateClash(a, b); }
-  animateCapture(r) { this.ui.animateCapture(r); }
+  // ----- UI-Hooks -----
+  animateClash(a, b) { if (this.ui && this.ui.animateClash) this.ui.animateClash(a, b); }
+  animateCapture(r) { if (this.ui && this.ui.animateCapture) this.ui.animateCapture(r); }
 
   save() {
     const data = {
       turn: this.turn,
+      mode: this.mode,
+      humanIndices: this.humanIndices,
+      currentHumanPos: this.currentHumanPos,
       clans: this.clans,
       regions: this.regions,
       selectedRegionId: this.selectedRegionId,
