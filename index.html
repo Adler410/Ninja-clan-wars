@@ -2,44 +2,81 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>Ninja Clan Wars</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <!-- Hauptcontainer für alle Spiel-Bildschirme -->
   <div id="app">
-    <!-- Startmenü -->
+
+    <!-- ============== Startmenü ============== -->
     <section id="screen-menu" class="screen active">
       <div class="menu-card">
         <h1 class="title">Ninja Clan Wars</h1>
         <p class="subtitle">Erobere die Lande der Schatten</p>
         <div class="menu-buttons">
-          <button class="btn btn-primary" data-action="new-game">Neues Spiel</button>
-          <button class="btn" data-action="load-game">Spiel laden</button>
-          <button class="btn" data-action="instructions">Anleitung</button>
-          <button class="btn" data-action="settings">Einstellungen</button>
+          <button class="btn btn-primary" data-action="goto-mode">⚔ Neues Spiel</button>
+          <button class="btn" data-action="load-game">💾 Spiel laden</button>
+          <button class="btn" data-action="instructions">📜 Anleitung</button>
+          <button class="btn" data-action="settings">⚙ Einstellungen</button>
         </div>
       </div>
     </section>
 
-    <!-- Anleitung -->
+    <!-- ============== Spielmodus-Auswahl ============== -->
+    <section id="screen-mode" class="screen">
+      <div class="panel">
+        <h2>Spielmodus wählen</h2>
+        <p class="muted">Wie möchtest du spielen?</p>
+
+        <div class="mode-grid">
+          <button class="mode-card" data-action="start-single">
+            <div class="mode-icon">🤖</div>
+            <div class="mode-title">Einzelspieler</div>
+            <div class="mode-desc">Tritt allein gegen 3 KI-Clans an.</div>
+          </button>
+          <button class="mode-card" data-action="start-hotseat">
+            <div class="mode-icon">👥</div>
+            <div class="mode-title">Zwei Spieler</div>
+            <div class="mode-desc">Lokales Hotseat-Spiel auf einem iPad. Die übrigen Clans werden von der KI gespielt.</div>
+          </button>
+        </div>
+
+        <div class="hotseat-options">
+          <label class="row"><span>Name Spieler 1</span><input type="text" id="opt-p1" value="Spieler 1" maxlength="16" /></label>
+          <label class="row"><span>Name Spieler 2</span><input type="text" id="opt-p2" value="Spieler 2" maxlength="16" /></label>
+          <label class="row">
+            <span>Übergabe-Bildschirm</span>
+            <input type="checkbox" id="opt-handoff" checked />
+          </label>
+        </div>
+
+        <div class="button-row">
+          <button class="btn" data-action="back-menu">Zurück</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============== Anleitung ============== -->
     <section id="screen-instructions" class="screen">
       <div class="panel">
         <h2>Anleitung</h2>
         <ul class="instructions">
-          <li>Wähle deinen Clan und erobere alle Regionen.</li>
-          <li>Pro Runde: Einkommen erhalten, Ninjas rekrutieren, Truppen bewegen, angreifen, Spezialfähigkeit einsetzen.</li>
-          <li>Klicke auf eine Region, dann nutze die Buttons unten.</li>
-          <li>Bewege oder greife nur in benachbarte Regionen.</li>
-          <li>Diplomatie wird automatisch von der KI gesteuert.</li>
-          <li>Das Spiel speichert automatisch im Browser.</li>
+          <li><b>Ziel:</b> Erobere alle Regionen auf der Karte.</li>
+          <li><b>Region wählen:</b> Tippe eine Region an, dann nutze die Buttons unten.</li>
+          <li><b>Rekrutieren:</b> Kauft Ninjas in eigenen Regionen.</li>
+          <li><b>Bewegen / Angreifen:</b> Nur in benachbarte Regionen.</li>
+          <li><b>Spezialfähigkeiten:</b> Kosten Gold und haben starke Effekte.</li>
+          <li><b>Runde beenden:</b> Schließt deinen Zug ab. KI bzw. Spieler 2 ist danach an der Reihe.</li>
+          <li><b>Speichern:</b> Erfolgt automatisch im Browser.</li>
         </ul>
         <button class="btn" data-action="back-menu">Zurück</button>
       </div>
     </section>
 
-    <!-- Einstellungen -->
+    <!-- ============== Einstellungen ============== -->
     <section id="screen-settings" class="screen">
       <div class="panel">
         <h2>Einstellungen</h2>
@@ -63,51 +100,64 @@
       </div>
     </section>
 
-    <!-- Spielbildschirm -->
+    <!-- ============== Spielbildschirm ============== -->
     <section id="screen-game" class="screen">
-      <!-- Top HUD -->
       <header id="hud-top">
-        <div class="hud-item"><span class="lbl">Runde</span><span id="hud-turn">1</span></div>
-        <div class="hud-item"><span class="lbl">Clan</span><span id="hud-clan">—</span></div>
-        <div class="hud-item"><span class="lbl">Gold</span><span id="hud-gold">0</span></div>
-        <div class="hud-item"><span class="lbl">Einkommen</span><span id="hud-income">0</span></div>
-        <div class="hud-item"><span class="lbl">Regionen</span><span id="hud-regions">0</span></div>
-        <button class="btn btn-small" data-action="to-menu">Menü</button>
+        <div class="hud-current">
+          <span class="hud-current-dot" id="hud-clan-dot"></span>
+          <div>
+            <div class="hud-current-name" id="hud-clan">—</div>
+            <div class="hud-current-sub" id="hud-mode-label">Einzelspieler</div>
+          </div>
+        </div>
+        <div class="hud-stats">
+          <div class="hud-item"><span class="lbl">Runde</span><span id="hud-turn">1</span></div>
+          <div class="hud-item"><span class="lbl">Gold</span><span id="hud-gold">0</span></div>
+          <div class="hud-item"><span class="lbl">Einkommen</span><span id="hud-income">0</span></div>
+          <div class="hud-item"><span class="lbl">Regionen</span><span id="hud-regions">0</span></div>
+        </div>
+        <button class="btn btn-small" data-action="to-menu">☰ Menü</button>
       </header>
 
       <main id="game-main">
-        <!-- Liste der Regionen -->
-        <aside id="region-list">
+        <aside id="region-list" class="side-panel">
           <h3>Regionen</h3>
           <ul id="region-list-ul"></ul>
         </aside>
 
-        <!-- Kartenbereich -->
         <div id="map-wrap">
           <svg id="map" viewBox="0 0 1000 700" preserveAspectRatio="xMidYMid meet"></svg>
           <div id="log-overlay"></div>
         </div>
 
-        <!-- Detailpanel -->
-        <aside id="region-details">
+        <aside id="region-details" class="side-panel">
           <h3 id="rd-name">Region wählen</h3>
-          <div id="rd-body" class="muted">Klicke auf eine Region auf der Karte.</div>
+          <div id="rd-body" class="muted">Tippe eine Region auf der Karte an.</div>
           <h3 class="mt">Diplomatie</h3>
           <ul id="diplo-list"></ul>
         </aside>
       </main>
 
-      <!-- Aktionsleiste unten -->
       <footer id="action-bar">
-        <button class="btn act" data-action="move">Bewegen</button>
-        <button class="btn act" data-action="attack">Angreifen</button>
-        <button class="btn act" data-action="recruit">Rekrutieren</button>
-        <button class="btn act" data-action="special">Spezialfähigkeit</button>
-        <button class="btn btn-primary" data-action="end-turn">Runde beenden</button>
+        <button class="btn act" data-action="recruit"><span class="act-ico">🥷</span><span>Rekrutieren</span></button>
+        <button class="btn act" data-action="move"><span class="act-ico">➡</span><span>Bewegen</span></button>
+        <button class="btn act" data-action="attack"><span class="act-ico">⚔</span><span>Angreifen</span></button>
+        <button class="btn act" data-action="special"><span class="act-ico">✨</span><span>Spezial</span></button>
+        <button class="btn btn-primary act" data-action="end-turn"><span class="act-ico">⏭</span><span>Runde beenden</span></button>
       </footer>
     </section>
 
-    <!-- Modal für Dialoge -->
+    <!-- ============== Übergabe-Bildschirm (Hotseat) ============== -->
+    <section id="screen-handoff" class="screen">
+      <div class="handoff-card">
+        <div class="handoff-icon">🤝</div>
+        <h2 id="handoff-title">Bitte an Spieler 2 übergeben</h2>
+        <p id="handoff-sub" class="muted">Reiche das iPad weiter.</p>
+        <button class="btn btn-primary btn-large" data-action="handoff-continue">Ich bin bereit ▶</button>
+      </div>
+    </section>
+
+    <!-- ============== Modal ============== -->
     <div id="modal" class="modal-hidden">
       <div class="modal-card">
         <h3 id="modal-title"></h3>
@@ -117,7 +167,6 @@
     </div>
   </div>
 
-  <!-- Skripte als ES6-Module -->
   <script type="module" src="app.js"></script>
 </body>
 </html>
